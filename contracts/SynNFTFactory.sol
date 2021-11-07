@@ -9,209 +9,183 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 interface ISynNFT {
-  function mint(address to) external;
+  function safeMint(address to, uint256 quantity) external;
+
+  function symbol() external returns (string memory);
 }
 
-//import "hardhat/console.sol";
+import "hardhat/console.sol";
 
-contract ERC721Factory is Ownable {
+contract SynNFTFactory is Ownable {
   using ECDSA for bytes32;
   using SafeMath for uint256;
 
-  event SaleSet(string nftSymbol);
+  event NFTSet(string nftSymbol, address nftAddress);
+  event ValidatorSet(address validator);
+  event TreasurySet(address treasury);
 
-  mapping(string => ISynNFT) public NFTs;
-
-  uint256 public ethBalance;
+  uint256 public treasuryBalance;
+  uint256 public withdrawnAmount;
   uint256 public limit;
 
-  address internal _bridge1;
-  address internal _bridge2;
+  address public validator;
+  address public treasury;
 
-  struct Team {
-    bytes3 name;
-    uint8 percentage;
-    uint224 withdrawnAmount;
+  mapping(bytes32 => uint8) public usedCodes;
+
+  // 1 word of storage in total
+  struct NFTConf {
+    ISynNFT nft;
+    uint256 price;
+    uint maxAllocation;
+    bool started;
+    bool paused;
   }
 
-  mapping(address => Team) public teams;
-  mapping(address => bool) public discounted;
+  // string is the keccak256(NFT's symbol)
+  mapping(bytes32 => NFTConf) public nftConf;
 
-  // < 1 word in storage
-  struct Conf {
-    address validator; //
-    // with block numbers it would have been safer
-    // but in our case the risk of fraud is very low
-    uint32 startingTimestamp;
-    uint16 nextTokenId;
-    uint16 maxBuyableTokenId;
-    uint8 maxPrice; // 180 = 1.8 ETH
-    uint8 decrementPercentage; // 10%
-    uint8 minutesBetweenDecrements; // 60 << 1 hour
-    uint8 numberOfSteps; // 32 << price reduces 10% every hour
+  constructor(address validator_, address treasury_) {
+    setValidator(validator_);
+    setTreasury(treasury_);
   }
 
-  Conf public conf;
-
-  modifier saleActive() {
-    require(block.timestamp >= uint256(conf.startingTimestamp), "Sale not started yet");
-    require(!saleEnded(), "Sale is ended or closed");
-    _;
+  function setValidator(address validator_) public onlyOwner {
+    require(validator_ != address(0), "validator cannot be 0x0");
+    validator = validator_;
   }
 
-  modifier isNotABridge() {
-    require(_msgSender() != _bridge1 && _msgSender() != _bridge2, "Bridge cannot claim tokens");
-    _;
+  function setTreasury(address treasury_) public onlyOwner {
+    require(treasury_ != address(0), "treasury cannot be 0x0");
+    treasury = treasury_;
   }
 
-  modifier enoughTokensLeft(uint256 tokenIdsLength) {
-    require(conf.nextTokenId + tokenIdsLength - 1 <= conf.maxBuyableTokenId, "Not enough tokens left");
-    _;
+  function getNftConf(bytes32 nftId) external view returns (NFTConf memory) {
+    return nftConf[nftId];
   }
 
-  constructor(address addr, address addr2) {
-    NFTs = IERC721Manageable(addr);
-    // 0x3B6aad76254A79A9E256C8AeD9187DEa505AAD52
-    everDragons = IEverDragonsERC721Token(addr2);
-    // 0x772Da237fc93ded712E5823b497Db5991CC6951e);
-  }
-
-  /**
-   * @dev See {IERC165-supportsInterface}.
-   */
-  function supportsInterface(bytes4 interfaceId) public view virtual override(ERC165, IERC165) returns (bool) {
-    return
-      interfaceId == type(IERC721).interfaceId ||
-      interfaceId == type(IERC721Metadata).interfaceId ||
-      super.supportsInterface(interfaceId);
-  }
-
-  function updateTeamAddress(address addr) external {
-    Team memory team0 = teams[_msgSender()];
-    require(team0.percentage > 0, "Forbidden");
-    require(addr != address(0), "No 0x0 allowed");
-    teams[addr] = Team(team0.name, team0.percentage, 0);
-    delete teams[_msgSender()];
-    emit TeamAddressUpdated(_msgSender(), addr);
-  }
-
-  function closeSale() external onlyOwner {
-    // This is irreversible.
-    // We use numberOfSteps to not use a boolean that would require more gas
-    conf.numberOfSteps = 0;
+  // it implicitly starts the sale at the first call
+  function startAndPauseUnpauseSale(
+    bytes32 nftId,
+    bool paused
+  ) external {
+    NFTConf memory conf = nftConf[nftId];
+    conf.started = true;
+    conf.paused = paused;
+    nftConf[nftId] = conf;
   }
 
   function init(
-    Conf memory conf_,
-    address edo,
-    address ed2,
-    address ndl,
-    address bridge1, // 0xeE0f42712598f28521f45237cf42ad95F1d52DAa
-    address bridge2 // 0x74AF9991d5FEa09EBB042CaFE51972D89aCDaFC8
+    address nftAddress,
+    uint256 tokenPrice,
+    uint maxAllocation
   ) external onlyOwner {
-    require(conf.validator == address(0), "Sale already set");
-    conf = conf_;
-    teams[edo] = Team(0x65646f, 20, 0);
-    teams[ed2] = Team(0x656432, 20, 0);
-    teams[ndl] = Team(0x6e646c, 60, 0);
-    _bridge1 = bridge1;
-    _bridge2 = bridge2;
+    ISynNFT synNFT = ISynNFT(nftAddress);
+    string memory symbol = synNFT.symbol();
+    require(bytes(symbol).length > 0, "NFT not found");
+    bytes32 nftId = keccak256(abi.encodePacked(symbol));
+    nftConf[nftId] = NFTConf({nft: synNFT, price: tokenPrice, maxAllocation: maxAllocation, started: false, paused: false});
+    emit NFTSet(symbol, nftAddress);
   }
 
-  function currentStep(uint8 skippedSteps) public view saleActive returns (uint8) {
-    uint8 step = uint8(
-      block.timestamp.sub(conf.startingTimestamp).div(uint256(conf.minutesBetweenDecrements) * 60).add(skippedSteps)
-    );
-    if (step > conf.numberOfSteps - 1) {
-      step = conf.numberOfSteps - 1;
-    }
-    return step;
-  }
-
-  function currentPrice(uint8 currentStep_) public view returns (uint256) {
-    uint256 price = uint256(conf.maxPrice);
-    for (uint8 i = 0; i < currentStep_; i++) {
-      price = price.div(10).mul(9);
-    }
-    return price.mul(10**18).div(100);
-  }
-
-  function saleEnded() public view returns (bool) {
-    return conf.numberOfSteps == 0 || conf.nextTokenId > conf.maxBuyableTokenId;
-  }
-
-  // actions
-
-  function claimTokens(uint256[] memory tokenIds) external isNotABridge saleActive {
-    for (uint256 i = 0; i < tokenIds.length; i++) {
-      require(everDragons.ownerOf(tokenIds[i]) == _msgSender(), "Not the token holder");
-      tokenIds[i] = tokenIds[i].add(conf.maxBuyableTokenId);
-    }
-    NFTs.mint(_msgSender(), tokenIds);
-  }
-
-  function giveAwayTokens(address[] memory recipients, uint256[] memory tokenIds) external onlyOwner {
-    require(recipients.length == tokenIds.length, "Inconsistent lengths");
-    for (uint256 i = 0; i < tokenIds.length; i++) {
-      require(
-        (saleEnded() && tokenIds[i] > conf.maxBuyableTokenId) || (!saleEnded() && tokenIds[i] > conf.maxBuyableTokenId + 972),
-        "Id out of range"
-      );
-    }
-    NFTs.mint(recipients, tokenIds);
-  }
-
-  function buyTokens(uint256 tokens) external payable saleActive enoughTokensLeft(tokens) {
-    uint256 price = currentPrice(currentStep(0));
-    require(msg.value >= price.mul(tokens), "Insufficient payment");
-    uint256[] memory tokenIds = new uint256[](tokens);
-    uint256 nextTokenId = uint256(conf.nextTokenId);
-    for (uint256 i = 0; i < tokens; i++) {
-      tokenIds[i] = nextTokenId++;
-    }
-    conf.nextTokenId = uint16(nextTokenId);
-    ethBalance += msg.value;
-    NFTs.mint(_msgSender(), tokenIds);
+  function claimFreeTokens(
+    bytes32 nftId,
+    uint256 quantity,
+    bytes32 authCode,
+    bytes memory signature
+  ) public {
+    // parameters are validated during the off-chain validation
+    require(usedCodes[authCode] == 0, "authCode already used");
+    require(isSignedByValidator(encodeForSignature(_msgSender(), nftId, quantity, authCode), signature), "invalid signature");
+    NFTConf memory conf = nftConf[nftId];
+    conf.nft.safeMint(_msgSender(), quantity);
+    usedCodes[authCode] = 1;
   }
 
   function buyDiscountedTokens(
-    uint256 tokens,
-    uint8 skippedSteps,
+    bytes32 nftId,
+    uint256 quantity,
+    bytes32 authCode,
+    uint256 discountedPrice,
     bytes memory signature
-  ) external payable saleActive enoughTokensLeft(tokens) {
-    require(isSignedByValidator(encodeForSignature(_msgSender(), tokens, skippedSteps), signature), "Invalid signature");
-    require(discounted[_msgSender()] == false, "Discount already used");
-    uint256 price = currentPrice(currentStep(skippedSteps));
-    require(msg.value >= price.mul(tokens), "Insufficient payment");
-    uint256[] memory tokenIds = new uint256[](tokens);
-    uint256 nextTokenId = uint256(conf.nextTokenId);
-    for (uint256 i = 0; i < tokens; i++) {
-      tokenIds[i] = nextTokenId++;
+  ) external payable {
+    // parameters are validated during the off-chain validation
+    NFTConf memory conf = nftConf[nftId];
+    require(conf.started, "public sale not started yet");
+    require(!conf.paused, "public sale has been paused");
+    require(usedCodes[authCode] == 0, "authCode already used");
+    require(
+      isSignedByValidator(encodeForSignature(_msgSender(), nftId, quantity, authCode, discountedPrice), signature),
+      "invalid signature"
+    );
+    require(msg.value >= discountedPrice.mul(quantity), "insufficient payment");
+    treasuryBalance += msg.value;
+    conf.nft.safeMint(_msgSender(), quantity);
+    usedCodes[authCode] = 1;
+  }
+
+  function giveawayTokens(
+    bytes32 nftId,
+    address[] memory recipients,
+    uint256[] memory quantities
+  ) external onlyOwner {
+    require(recipients.length == quantities.length, "inconsistent lengths");
+    NFTConf memory conf = nftConf[nftId];
+    for (uint256 i = 0; i < recipients.length; i++) {
+      conf.nft.safeMint(recipients[i], quantities[i]);
     }
-    conf.nextTokenId = uint16(nextTokenId);
-    ethBalance += msg.value;
-    NFTs.mint(_msgSender(), tokenIds);
-    discounted[_msgSender()] = true;
+  }
+
+  function buyTokens(bytes32 nftId, uint256 quantity) public payable {
+    NFTConf memory conf = nftConf[nftId];
+    require(conf.started, "public sale not started yet");
+    require(!conf.paused, "public sale has been paused");
+    require(quantity <= conf.maxAllocation, "quantity is more than max allocation");
+    require(msg.value >= conf.price.mul(quantity), "insufficient payment");
+    treasuryBalance += msg.value;
+    conf.nft.safeMint(_msgSender(), quantity);
   }
 
   // cryptography
 
   function isSignedByValidator(bytes32 _hash, bytes memory _signature) public view returns (bool) {
-    return conf.validator == ECDSA.recover(_hash, _signature);
+    return validator == ECDSA.recover(_hash, _signature);
   }
 
   function encodeForSignature(
     address addr,
-    uint256 tokens,
-    uint8 skippedSteps
+    bytes32 nftId,
+    uint256 quantity,
+    bytes32 authCode
   ) public pure returns (bytes32) {
     return
       keccak256(
         abi.encodePacked(
-          "\x19\x00", // EIP-191
+          "\x19\x01", // EIP-191
           addr,
-          tokens,
-          skippedSteps
+          nftId,
+          quantity,
+          authCode
+        )
+      );
+  }
+
+  function encodeForSignature(
+    address addr,
+    bytes32 nftId,
+    uint256 quantity,
+    bytes32 authCode,
+    uint256 discountedPrice
+  ) public pure returns (bytes32) {
+    return
+      keccak256(
+        abi.encodePacked(
+          "\x19\x01", // EIP-191
+          addr,
+          nftId,
+          quantity,
+          authCode,
+          discountedPrice
         )
       );
   }
@@ -219,19 +193,11 @@ contract ERC721Factory is Ownable {
   // withdraw
 
   function claimEarnings(uint256 amount) external {
-    require(saleEnded(), "Sale still active");
-    uint256 available = withdrawable(_msgSender());
+    require(_msgSender() == treasury, "not the treasury");
+    uint256 available = treasuryBalance.sub(withdrawnAmount);
     require(amount <= available, "Insufficient funds");
-    teams[_msgSender()].withdrawnAmount += uint224(amount);
+    withdrawnAmount = withdrawnAmount.add(amount);
     (bool success, ) = _msgSender().call{value: amount}("");
     require(success);
-  }
-
-  function withdrawable(address addr) public view returns (uint256) {
-    if (teams[addr].percentage > 0) {
-      return ethBalance.div(100).mul(teams[addr].percentage).sub(teams[addr].withdrawnAmount);
-    } else {
-      return 0;
-    }
   }
 }
