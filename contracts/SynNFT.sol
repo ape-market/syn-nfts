@@ -21,8 +21,7 @@ contract SynNFT is ERC721, ERC721Enumerable, Ownable {
   Counters.Counter private _tokenIdTracker;
 
   string private _baseTokenURI;
-  uint256 private _totalSupply;
-  bool private _mintEnded;
+  uint private _mintStatus = 1;
 
   modifier onlyFactory() {
     require(factory != address(0) && _msgSender() == factory, "forbidden");
@@ -32,11 +31,9 @@ contract SynNFT is ERC721, ERC721Enumerable, Ownable {
   constructor(
     string memory name,
     string memory symbol,
-    string memory baseTokenURI,
-    uint256 totalSupply
+    string memory baseTokenURI
   ) ERC721(name, symbol) {
     _baseTokenURI = baseTokenURI;
-    _totalSupply = totalSupply;
     _tokenIdTracker.increment(); // < starts from 1
   }
 
@@ -58,13 +55,16 @@ contract SynNFT is ERC721, ERC721Enumerable, Ownable {
   }
 
   function safeMint(address to, uint256 quantity) external onlyFactory {
-    require(!_mintEnded, "minting ended");
-    require(_tokenIdTracker.current() + quantity - 1 <= _totalSupply, "token out of range");
+    require(_mintStatus != 0, "minting ended");
     for (uint256 i = 0; i < quantity; i++) {
       uint256 tokenId = _tokenIdTracker.current();
       _tokenIdTracker.increment();
       _safeMint(to, tokenId);
     }
+  }
+
+  function burn(uint256 tokenId) public virtual onlyFactory {
+    _burn(tokenId);
   }
 
   function nextTokenId() external view returns (uint256) {
@@ -79,9 +79,20 @@ contract SynNFT is ERC721, ERC721Enumerable, Ownable {
     _baseTokenURI = baseTokenURI;
   }
 
-  function endMinting() external onlyOwner {
-    // anticipate the end of token sale, if needed
-    _mintEnded = true;
+  /**
+     * @dev Change the status
+     *      from 1   (mintable, default)
+     *      to   0   (not mintable)
+     *      or   2   (mintable forever)
+     */
+  function changeMintStatus(uint newStatus) external onlyOwner {
+    if (newStatus == 2) {
+      _mintStatus = 2;
+    } else if (newStatus == 0 && _mintStatus != 2) {
+      _mintStatus = 0;
+    } else {
+      revert("Wrong parameter");
+    }
   }
 
 }

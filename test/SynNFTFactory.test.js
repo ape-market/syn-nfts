@@ -37,7 +37,7 @@ describe("SynNFTFactory", function () {
 
   async function initAndDeploy() {
       SynNFT = await ethers.getContractFactory("SynNFT")
-      synNft = await SynNFT.deploy('Blueprints', 'SBP', 'https://syn.io/meta/', 1000)
+      synNft = await SynNFT.deploy('Blueprints', 'SBP', 'https://syn.io/meta/')
       await synNft.deployed()
       nftAddress = synNft.address
 
