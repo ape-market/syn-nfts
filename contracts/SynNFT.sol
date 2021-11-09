@@ -83,4 +83,5 @@ contract SynNFT is ERC721, ERC721Enumerable, Ownable {
     // anticipate the end of token sale, if needed
     _mintEnded = true;
   }
+
 }

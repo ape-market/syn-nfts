@@ -7,14 +7,15 @@ const Helpers = {
   },
 
   async assertThrowsMessage(promise, message, showError) {
+    let notThrowing
     try {
       await promise
+      notThrowing = true
       assert.isTrue(false)
-      console.error('This did not throw: ', message)
     } catch (e) {
-      if (showError) {
-        console.error('Expected: ', message)
-        console.error(e.message)
+      if (notThrowing) {
+        console.error('Expected:', message)
+        console.error('Returned:', e.message)
       }
       assert.isTrue(e.message.indexOf(message) > -1)
     }

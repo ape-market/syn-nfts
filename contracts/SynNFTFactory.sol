@@ -12,6 +12,8 @@ interface ISynNFT {
   function safeMint(address to, uint256 quantity) external;
 
   function symbol() external returns (string memory);
+
+  function balanceOf(address owner) external view returns (uint256);
 }
 
 import "hardhat/console.sol";
@@ -20,11 +22,10 @@ contract SynNFTFactory is Ownable {
   using ECDSA for bytes32;
   using SafeMath for uint256;
 
-  event NFTSet(string nftSymbol, address nftAddress);
+  event NFTSet(address nftAddress);
   event ValidatorSet(address validator);
   event TreasurySet(address treasury);
 
-  uint256 public treasuryBalance;
   uint256 public withdrawnAmount;
   uint256 public limit;
 
@@ -38,12 +39,10 @@ contract SynNFTFactory is Ownable {
     ISynNFT nft;
     uint256 price;
     uint maxAllocation;
-    bool started;
     bool paused;
   }
 
-  // string is the keccak256(NFT's symbol)
-  mapping(bytes32 => NFTConf) public nftConf;
+  mapping(address => NFTConf) public nftConf;
 
   constructor(address validator_, address treasury_) {
     setValidator(validator_);
@@ -60,89 +59,82 @@ contract SynNFTFactory is Ownable {
     treasury = treasury_;
   }
 
-  function getNftConf(bytes32 nftId) external view returns (NFTConf memory) {
-    return nftConf[nftId];
+  function getNftConf(address nftAddress) external view returns (NFTConf memory) {
+    return nftConf[nftAddress];
   }
 
   // it implicitly starts the sale at the first call
-  function startAndPauseUnpauseSale(
-    bytes32 nftId,
+  function openPauseSale(
+    address nftAddress,
     bool paused
   ) external {
-    NFTConf memory conf = nftConf[nftId];
-    conf.started = true;
+    NFTConf memory conf = nftConf[nftAddress];
     conf.paused = paused;
-    nftConf[nftId] = conf;
+    nftConf[nftAddress] = conf;
   }
 
   function init(
     address nftAddress,
-    uint256 tokenPrice,
+    uint256 price,
     uint maxAllocation
   ) external onlyOwner {
     ISynNFT synNFT = ISynNFT(nftAddress);
-    string memory symbol = synNFT.symbol();
-    require(bytes(symbol).length > 0, "NFT not found");
-    bytes32 nftId = keccak256(abi.encodePacked(symbol));
-    nftConf[nftId] = NFTConf({nft: synNFT, price: tokenPrice, maxAllocation: maxAllocation, started: false, paused: false});
-    emit NFTSet(symbol, nftAddress);
+    nftConf[nftAddress] = NFTConf({nft: synNFT, price: price, maxAllocation: maxAllocation, paused: true});
+    emit NFTSet(nftAddress);
   }
 
   function claimFreeTokens(
-    bytes32 nftId,
+    address nftAddress,
     uint256 quantity,
     bytes32 authCode,
     bytes memory signature
   ) public {
     // parameters are validated during the off-chain validation
     require(usedCodes[authCode] == 0, "authCode already used");
-    require(isSignedByValidator(encodeForSignature(_msgSender(), nftId, quantity, authCode), signature), "invalid signature");
-    NFTConf memory conf = nftConf[nftId];
+    require(isSignedByValidator(encodeForSignature(_msgSender(), nftAddress, quantity, authCode), signature), "invalid signature");
+    NFTConf memory conf = nftConf[nftAddress];
     conf.nft.safeMint(_msgSender(), quantity);
     usedCodes[authCode] = 1;
   }
 
   function buyDiscountedTokens(
-    bytes32 nftId,
+    address nftAddress,
     uint256 quantity,
     bytes32 authCode,
     uint256 discountedPrice,
     bytes memory signature
   ) external payable {
     // parameters are validated during the off-chain validation
-    NFTConf memory conf = nftConf[nftId];
-    require(conf.started, "public sale not started yet");
-    require(!conf.paused, "public sale has been paused");
+    NFTConf memory conf = nftConf[nftAddress];
+    require(!conf.paused, "sale is either not open or has been paused");
     require(usedCodes[authCode] == 0, "authCode already used");
+    require(conf.nft.balanceOf(_msgSender()) + quantity <= conf.maxAllocation, "quantity exceeds max allocation");
     require(
-      isSignedByValidator(encodeForSignature(_msgSender(), nftId, quantity, authCode, discountedPrice), signature),
+      isSignedByValidator(encodeForSignature(_msgSender(), nftAddress, quantity, authCode, discountedPrice), signature),
       "invalid signature"
     );
     require(msg.value >= discountedPrice.mul(quantity), "insufficient payment");
-    treasuryBalance += msg.value;
     conf.nft.safeMint(_msgSender(), quantity);
     usedCodes[authCode] = 1;
   }
 
   function giveawayTokens(
-    bytes32 nftId,
+    address nftAddress,
     address[] memory recipients,
     uint256[] memory quantities
   ) external onlyOwner {
     require(recipients.length == quantities.length, "inconsistent lengths");
-    NFTConf memory conf = nftConf[nftId];
+    NFTConf memory conf = nftConf[nftAddress];
     for (uint256 i = 0; i < recipients.length; i++) {
       conf.nft.safeMint(recipients[i], quantities[i]);
     }
   }
 
-  function buyTokens(bytes32 nftId, uint256 quantity) public payable {
-    NFTConf memory conf = nftConf[nftId];
-    require(conf.started, "public sale not started yet");
-    require(!conf.paused, "public sale has been paused");
-    require(quantity <= conf.maxAllocation, "quantity is more than max allocation");
+  function buyTokens(address nftAddress, uint256 quantity) public payable {
+    NFTConf memory conf = nftConf[nftAddress];
+    require(!conf.paused, "sale is either not open or has been paused");
+    require(conf.nft.balanceOf(_msgSender()) + quantity <= conf.maxAllocation, "quantity exceeds max allocation");
     require(msg.value >= conf.price.mul(quantity), "insufficient payment");
-    treasuryBalance += msg.value;
     conf.nft.safeMint(_msgSender(), quantity);
   }
 
@@ -153,8 +145,8 @@ contract SynNFTFactory is Ownable {
   }
 
   function encodeForSignature(
-    address addr,
-    bytes32 nftId,
+    address recipient,
+    address nftAddress,
     uint256 quantity,
     bytes32 authCode
   ) public pure returns (bytes32) {
@@ -162,8 +154,8 @@ contract SynNFTFactory is Ownable {
       keccak256(
         abi.encodePacked(
           "\x19\x01", // EIP-191
-          addr,
-          nftId,
+          recipient,
+          nftAddress,
           quantity,
           authCode
         )
@@ -171,8 +163,8 @@ contract SynNFTFactory is Ownable {
   }
 
   function encodeForSignature(
-    address addr,
-    bytes32 nftId,
+    address recipient,
+    address nftAddress,
     uint256 quantity,
     bytes32 authCode,
     uint256 discountedPrice
@@ -181,8 +173,8 @@ contract SynNFTFactory is Ownable {
       keccak256(
         abi.encodePacked(
           "\x19\x01", // EIP-191
-          addr,
-          nftId,
+          recipient,
+          nftAddress,
           quantity,
           authCode,
           discountedPrice
@@ -192,11 +184,13 @@ contract SynNFTFactory is Ownable {
 
   // withdraw
 
-  function claimEarnings(uint256 amount) external {
+  function withdrawProceeds(uint256 amount) external {
     require(_msgSender() == treasury, "not the treasury");
-    uint256 available = treasuryBalance.sub(withdrawnAmount);
+    uint256 available = address(this).balance;
+    if (amount == 0) {
+      amount = available;
+    }
     require(amount <= available, "Insufficient funds");
-    withdrawnAmount = withdrawnAmount.add(amount);
     (bool success, ) = _msgSender().call{value: amount}("");
     require(success);
   }
