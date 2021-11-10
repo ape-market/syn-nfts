@@ -49,6 +49,8 @@ contract SynNFT is ERC721, ERC721Enumerable, Ownable {
     return super.supportsInterface(interfaceId);
   }
 
+  // Initially the factory is the contract who manages the minting
+  // in the future will be replaced by a manager
   function setFactory(address factory_) external onlyOwner {
     require(factory_ != address(0), "factory cannot be 0x0");
     factory = factory_;
