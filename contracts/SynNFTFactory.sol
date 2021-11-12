@@ -16,6 +16,8 @@ interface ISynNFT {
   function symbol() external returns (string memory);
 
   function balanceOf(address owner) external view returns (uint256);
+
+  function nextTokenId() external view returns (uint256);
 }
 
 contract SynNFTFactory is Ownable {
@@ -39,6 +41,7 @@ contract SynNFTFactory is Ownable {
     ISynNFT nft;
     uint256 price;
     uint256 maxAllocation;
+    uint256 remainingFreeTokens;
     bool paused;
   }
 
@@ -73,29 +76,35 @@ contract SynNFTFactory is Ownable {
   function init(
     address nftAddress,
     uint256 price,
-    uint256 maxAllocation
+    uint256 maxAllocation,
+    uint256 remainingFreeTokens
   ) external onlyOwner {
     require(validator != address(0) && treasury != address(0), "validator and/or treasury not set, yet");
     ISynNFT synNFT = ISynNFT(nftAddress);
-    nftConf[nftAddress] = NFTConf({nft: synNFT, price: price, maxAllocation: maxAllocation, paused: true});
+    nftConf[nftAddress] = NFTConf({
+      nft: synNFT,
+      price: price,
+      maxAllocation: maxAllocation,
+      paused: true,
+      remainingFreeTokens: remainingFreeTokens
+    });
     emit NFTSet(nftAddress);
   }
 
-  function claimFreeTokens(
+  function claimAFreeToken(
     address nftAddress,
-    uint256 quantity,
     bytes32 authCode,
     bytes memory signature
   ) public {
     // parameters are validated during the off-chain validation
     require(usedCodes[authCode] == 0, "authCode already used");
-    require(
-      isSignedByValidator(encodeForSignature(_msgSender(), nftAddress, quantity, authCode), signature),
-      "invalid signature"
-    );
+    require(isSignedByValidator(encodeForSignature(_msgSender(), nftAddress, authCode), signature), "invalid signature");
     NFTConf memory conf = nftConf[nftAddress];
-    conf.nft.safeMint(_msgSender(), quantity);
+    require(conf.nft.balanceOf(_msgSender()) == 0, "only one token per wallet");
+    require(conf.remainingFreeTokens >= 1, "no more free tokens available");
+    conf.nft.safeMint(_msgSender(), 1);
     usedCodes[authCode] = 1;
+    nftConf[nftAddress].remainingFreeTokens--;
   }
 
   function buyDiscountedTokens(
@@ -148,7 +157,6 @@ contract SynNFTFactory is Ownable {
   function encodeForSignature(
     address recipient,
     address nftAddress,
-    uint256 quantity,
     bytes32 authCode
   ) public pure returns (bytes32) {
     return
@@ -157,7 +165,6 @@ contract SynNFTFactory is Ownable {
           "\x19\x01", // EIP-191
           recipient,
           nftAddress,
-          quantity,
           authCode
         )
       );
