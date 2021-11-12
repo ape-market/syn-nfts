@@ -7,6 +7,7 @@ specifiers:
   '@openzeppelin/contracts': ^4.0.0
   '@poanet/solidity-flattener': ^3.0.6
   chai: ^4.3.4
+  dotenv: ^10.0.0
   ethereum-waffle: ^3.3.0
   ethers: ^5.0.32
   fspath: ^0.15.0
@@ -20,6 +21,7 @@ specifiers:
 
 dependencies:
   '@poanet/solidity-flattener': 3.0.6
+  dotenv: 10.0.0
   fspath: 0.15.0
   ipfs-http-client: 49.0.4
   require-or-mock: 0.2.1
@@ -2779,6 +2781,11 @@ packages:
   /dom-walk/0.1.2:
     resolution: {integrity: sha512-6QvTW9mrGeIegrFXdtQi9pk7O/nSK6lSdXW2eqUspN5LWD7UTji2Fqw5V2YLjBpHEoU9Xl/eUWNpDeZvoyOv2w==}
     dev: true
+
+  /dotenv/10.0.0:
+    resolution: {integrity: sha512-rlBi9d8jpv9Sf1klPjNfFAuWDjKLwTIJJ/VxtoTwIR6hnZxcEOQCZg2oIL3MWBYw5GpUDKOEnND7LXTbIpQ03Q==}
+    engines: {node: '>=10'}
+    dev: false
 
   /dotignore/0.1.2:
     resolution: {integrity: sha512-UGGGWfSauusaVJC+8fgV+NVvBXkCTmVv7sk6nojDZZvuOUNGUy0Zk4UpHQD6EDjS0jpBwcACvH4eofvyzBcRDw==}

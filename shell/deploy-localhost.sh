@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+VALIDATOR=0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65 TREASURY=0x70997970C51812dc3A010C7d01b50e0d17dc79C8 REMAINING_FREE_TOKENS=100 npx hardhat run scripts/deploy.js --network localhost
