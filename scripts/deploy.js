@@ -38,7 +38,7 @@ async function main() {
   synNft.setFactory(synNFTFactory.address)
 
   const addresses = {
-    SynNft: synNft.address,
+    SynNFT: synNft.address,
     SynNFTFactory: synNFTFactory.address,
   }
 
