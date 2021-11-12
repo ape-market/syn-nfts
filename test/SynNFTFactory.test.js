@@ -35,11 +35,6 @@ describe("SynNFTFactory", function () {
     maxAllocation = ethers.BigNumber.from(5)
     remainingFreeTokens = ethers.BigNumber.from(5)
     initEthers(ethers)
-
-    console.log(
-        validator.address,
-        treasury.address
-    )
   })
 
   async function initAndDeploy() {
@@ -58,9 +53,12 @@ describe("SynNFTFactory", function () {
   async function configure() {
     await synFactory.init(
         synNft.address,
-        price,
-        maxAllocation,
         remainingFreeTokens
+    )
+    await synFactory.updatePriceAndMaxAllocation(
+        synNft.address,
+        price,
+        maxAllocation
     )
   }
 

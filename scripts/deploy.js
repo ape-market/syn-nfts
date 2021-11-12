@@ -35,8 +35,20 @@ async function main() {
   const SynNFTFactory = await ethers.getContractFactory("SynNFTFactory")
   const synNFTFactory = await SynNFTFactory.deploy()
   await synNFTFactory.deployed()
-  await synNFTFactory.setValidatorAndTreasury(process.env.VALIDATOR, process.env.TREASURY)
+  await synNFTFactory.setValidatorAndTreasury(process.env.VALIDATOR, process.env.TREASURY, {
+    gasLimit: 75000
+  })
   synNft.setFactory(synNFTFactory.address)
+
+  // init factory
+
+  await synNFTFactory.init(
+      synNft.address,
+      parseInt(process.env.REMAINING_FREE_TOKENS),
+      {
+        gasLimit: 150000
+      }
+  )
 
   const addresses = {
     SynNFT: synNft.address,

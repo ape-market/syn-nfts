@@ -73,22 +73,31 @@ contract SynNFTFactory is Ownable {
     nftConf[nftAddress] = conf;
   }
 
-  function init(
-    address nftAddress,
-    uint256 price,
-    uint256 maxAllocation,
-    uint256 remainingFreeTokens
-  ) external onlyOwner {
+  function init(address nftAddress, uint256 remainingFreeTokens) external onlyOwner {
     require(validator != address(0) && treasury != address(0), "validator and/or treasury not set, yet");
     ISynNFT synNFT = ISynNFT(nftAddress);
     nftConf[nftAddress] = NFTConf({
       nft: synNFT,
-      price: price,
-      maxAllocation: maxAllocation,
+      price: 10**18, // < 10 ETH, to be changed
+      maxAllocation: 5,
       paused: true,
       remainingFreeTokens: remainingFreeTokens
     });
     emit NFTSet(nftAddress);
+  }
+
+  function updatePriceAndMaxAllocation(
+    address nftAddress,
+    uint256 price,
+    uint256 maxAllocation
+  ) external onlyOwner {
+    require(address(nftConf[nftAddress].nft) != address(0), "trying to modify a not existing conf");
+    if (nftConf[nftAddress].price != price) {
+      nftConf[nftAddress].price = price;
+    }
+    if (nftConf[nftAddress].maxAllocation != maxAllocation) {
+      nftConf[nftAddress].maxAllocation = maxAllocation;
+    }
   }
 
   function claimAFreeToken(
