@@ -4,6 +4,13 @@
 // When running the script with `hardhat run <script>` you'll find the Hardhat
 // Runtime Environment's members available in the global scope.
 const hre = require("hardhat");
+const fs = require('fs-extra')
+const path = require('path')
+const ethers = hre.ethers
+
+async function currentChainId() {
+  return (await ethers.provider.getNetwork()).chainId
+}
 
 async function main() {
   // Hardhat always runs the compile task when running scripts with its command
@@ -23,15 +30,48 @@ async function main() {
   console.log("Account balance:", (await deployer.getBalance()).toString());
 
   const SynNFT = await ethers.getContractFactory("SynNFT")
-  const synNft = await SynNFT.deploy()
+  const synNft = await SynNFT.deploy('Syn Blueprint', 'SYNBP', 'https://blueprint.syn.city/metadata/')
   await synNft.deployed()
-  // EverDragons2Manager = await ethers.getContractFactory("EverDragons2Manager")
-  // everDragons2Manager = await EverDragons2Manager.deploy(everDragons2.address)
-  // await everDragons2Manager.deployed()
-  // everDragons2.setManager(everDragons2Manager.address)
+  const SynNFTFactory = await ethers.getContractFactory("SynNFTFactory")
+  const synNFTFactory = await SynNFTFactory.deploy()
+  await synNFTFactory.deployed()
+  synNft.setFactory(synNFTFactory.address)
 
-  console.log("ERC721Manageable deployed to:", synNft.address);
-  // console.log("EverDragons2Manager deployed to:", everDragons2Manager.address);
+  const addresses = {
+    SynNft: synNft.address,
+    SynNFTFactory: synNFTFactory.address,
+  }
+
+  const result= {}
+  result[await currentChainId()] = addresses
+
+  console.log(result)
+
+  if (process.env.SAVE_DEPLOYED_ADDRESSES) {
+    await saveAddresses(result, Object.keys(addresses))
+  }
+
+}
+
+async function saveAddresses(result, addresses) {
+  const output = path.resolve(__dirname, '../export/deployed.json')
+  await fs.ensureDir(path.dirname(output))
+  await fs.writeFile(output, JSON.stringify(result, null, 2))
+  await exportABIs(addresses)
+}
+
+async function exportABIs(contracts) {
+  const ABIs = {
+    when: (new Date).toISOString(),
+    contracts: {}
+  }
+
+  for (let name of contracts) {
+    let source = path.resolve(__dirname, `../artifacts/contracts/${name}.sol/${name}.json`)
+    let json = require(source)
+    ABIs.contracts[name] = json.abi
+  }
+  fs.writeFileSync(path.resolve(__dirname, '../export/ABIs.json'), JSON.stringify(ABIs, null, 2))
 }
 
 // We recommend this pattern to be able to use async/await everywhere

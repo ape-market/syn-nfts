@@ -42,8 +42,9 @@ describe("SynNFTFactory", function () {
       nftAddress = synNft.address
 
     SynNFTFactory = await ethers.getContractFactory("SynNFTFactory")
-      synFactory = await SynNFTFactory.deploy(validator.address, treasury.address)
+      synFactory = await SynNFTFactory.deploy()
       await synFactory.deployed()
+      await synFactory.setValidatorAndTreasury(validator.address, treasury.address)
       synNft.setFactory(synFactory.address)
   }
 
