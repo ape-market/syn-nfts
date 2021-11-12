@@ -11,11 +11,11 @@ const Helpers = {
     try {
       await promise
       notThrowing = true
+      console.error('Returned:', message)
       assert.isTrue(false)
     } catch (e) {
       if (notThrowing) {
         console.error('Expected:', message)
-        console.error('Returned:', e.message)
       }
       assert.isTrue(e.message.indexOf(message) > -1)
     }
