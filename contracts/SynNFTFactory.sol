@@ -44,7 +44,7 @@ contract SynNFTFactory is Ownable {
 
   mapping(address => NFTConf) public nftConf;
 
-  constructor(address validator_, address treasury_) {
+  function setValidatorAndTreasury(address validator_, address treasury_) external onlyOwner {
     setValidator(validator_);
     setTreasury(treasury_);
   }
@@ -78,8 +78,9 @@ contract SynNFTFactory is Ownable {
     uint256 price,
     uint maxAllocation
   ) external onlyOwner {
+    require(validator != address(0) && treasury != address(0), "validator and/or treasury not set, yet");
     ISynNFT synNFT = ISynNFT(nftAddress);
-    nftConf[nftAddress] = NFTConf({nft: synNFT, price: price, maxAllocation: maxAllocation, paused: true});
+    nftConf[nftAddress] = NFTConf({nft : synNFT, price : price, maxAllocation : maxAllocation, paused : true});
     emit NFTSet(nftAddress);
   }
 
@@ -151,15 +152,15 @@ contract SynNFTFactory is Ownable {
     bytes32 authCode
   ) public pure returns (bytes32) {
     return
-      keccak256(
-        abi.encodePacked(
-          "\x19\x01", // EIP-191
-          recipient,
-          nftAddress,
-          quantity,
-          authCode
-        )
-      );
+    keccak256(
+      abi.encodePacked(
+        "\x19\x01", // EIP-191
+        recipient,
+        nftAddress,
+        quantity,
+        authCode
+      )
+    );
   }
 
   function encodeForSignature(
@@ -170,16 +171,16 @@ contract SynNFTFactory is Ownable {
     uint256 discountedPrice
   ) public pure returns (bytes32) {
     return
-      keccak256(
-        abi.encodePacked(
-          "\x19\x01", // EIP-191
-          recipient,
-          nftAddress,
-          quantity,
-          authCode,
-          discountedPrice
-        )
-      );
+    keccak256(
+      abi.encodePacked(
+        "\x19\x01", // EIP-191
+        recipient,
+        nftAddress,
+        quantity,
+        authCode,
+        discountedPrice
+      )
+    );
   }
 
   // withdraw
@@ -191,7 +192,7 @@ contract SynNFTFactory is Ownable {
       amount = available;
     }
     require(amount <= available, "Insufficient funds");
-    (bool success, ) = _msgSender().call{value: amount}("");
+    (bool success,) = _msgSender().call{value : amount}("");
     require(success);
   }
 }

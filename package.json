@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@poanet/solidity-flattener": "^3.0.6",
+    "fspath": "^0.15.0",
     "ipfs-http-client": "^49.0.4",
     "require-or-mock": "^0.2.1"
   }

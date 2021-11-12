@@ -9,6 +9,7 @@ specifiers:
   chai: ^4.3.4
   ethereum-waffle: ^3.3.0
   ethers: ^5.0.32
+  fspath: ^0.15.0
   hardhat: ^2.1.2
   hardhat-gas-reporter: ^1.0.4
   ipfs-http-client: ^49.0.4
@@ -19,6 +20,7 @@ specifiers:
 
 dependencies:
   '@poanet/solidity-flattener': 3.0.6
+  fspath: 0.15.0
   ipfs-http-client: 49.0.4
   require-or-mock: 0.2.1
 
@@ -4015,6 +4017,11 @@ packages:
     os: [darwin]
     dev: true
     optional: true
+
+  /fspath/0.15.0:
+    resolution: {integrity: sha1-xq8giXlXN/yRI6eRENDo5JBjBtA=}
+    engines: {node: '>=4'}
+    dev: false
 
   /function-bind/1.1.1:
     resolution: {integrity: sha512-yIovAzMX49sF8Yl58fSCWJ5svSLuaibPxXQJFLmBObTuCr0Mf1KiPopGM9NiFjiYBCbfaa2Fh6breQ6ANVTI0A==}
