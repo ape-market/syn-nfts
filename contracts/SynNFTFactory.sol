@@ -8,6 +8,8 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+import "hardhat/console.sol";
+
 interface ISynNFT {
   function safeMint(address to, uint256 quantity) external;
 
@@ -15,8 +17,6 @@ interface ISynNFT {
 
   function balanceOf(address owner) external view returns (uint256);
 }
-
-import "hardhat/console.sol";
 
 contract SynNFTFactory is Ownable {
   using ECDSA for bytes32;
@@ -38,7 +38,7 @@ contract SynNFTFactory is Ownable {
   struct NFTConf {
     ISynNFT nft;
     uint256 price;
-    uint maxAllocation;
+    uint256 maxAllocation;
     bool paused;
   }
 
@@ -64,10 +64,7 @@ contract SynNFTFactory is Ownable {
   }
 
   // it implicitly starts the sale at the first call
-  function openPauseSale(
-    address nftAddress,
-    bool paused
-  ) external {
+  function openPauseSale(address nftAddress, bool paused) external {
     NFTConf memory conf = nftConf[nftAddress];
     conf.paused = paused;
     nftConf[nftAddress] = conf;
@@ -76,11 +73,11 @@ contract SynNFTFactory is Ownable {
   function init(
     address nftAddress,
     uint256 price,
-    uint maxAllocation
+    uint256 maxAllocation
   ) external onlyOwner {
     require(validator != address(0) && treasury != address(0), "validator and/or treasury not set, yet");
     ISynNFT synNFT = ISynNFT(nftAddress);
-    nftConf[nftAddress] = NFTConf({nft : synNFT, price : price, maxAllocation : maxAllocation, paused : true});
+    nftConf[nftAddress] = NFTConf({nft: synNFT, price: price, maxAllocation: maxAllocation, paused: true});
     emit NFTSet(nftAddress);
   }
 
@@ -92,7 +89,10 @@ contract SynNFTFactory is Ownable {
   ) public {
     // parameters are validated during the off-chain validation
     require(usedCodes[authCode] == 0, "authCode already used");
-    require(isSignedByValidator(encodeForSignature(_msgSender(), nftAddress, quantity, authCode), signature), "invalid signature");
+    require(
+      isSignedByValidator(encodeForSignature(_msgSender(), nftAddress, quantity, authCode), signature),
+      "invalid signature"
+    );
     NFTConf memory conf = nftConf[nftAddress];
     conf.nft.safeMint(_msgSender(), quantity);
     usedCodes[authCode] = 1;
@@ -152,15 +152,15 @@ contract SynNFTFactory is Ownable {
     bytes32 authCode
   ) public pure returns (bytes32) {
     return
-    keccak256(
-      abi.encodePacked(
-        "\x19\x01", // EIP-191
-        recipient,
-        nftAddress,
-        quantity,
-        authCode
-      )
-    );
+      keccak256(
+        abi.encodePacked(
+          "\x19\x01", // EIP-191
+          recipient,
+          nftAddress,
+          quantity,
+          authCode
+        )
+      );
   }
 
   function encodeForSignature(
@@ -171,16 +171,16 @@ contract SynNFTFactory is Ownable {
     uint256 discountedPrice
   ) public pure returns (bytes32) {
     return
-    keccak256(
-      abi.encodePacked(
-        "\x19\x01", // EIP-191
-        recipient,
-        nftAddress,
-        quantity,
-        authCode,
-        discountedPrice
-      )
-    );
+      keccak256(
+        abi.encodePacked(
+          "\x19\x01", // EIP-191
+          recipient,
+          nftAddress,
+          quantity,
+          authCode,
+          discountedPrice
+        )
+      );
   }
 
   // withdraw
@@ -192,7 +192,7 @@ contract SynNFTFactory is Ownable {
       amount = available;
     }
     require(amount <= available, "Insufficient funds");
-    (bool success,) = _msgSender().call{value : amount}("");
+    (bool success, ) = _msgSender().call{value: amount}("");
     require(success);
   }
 }

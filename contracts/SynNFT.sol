@@ -21,7 +21,7 @@ contract SynNFT is ERC721, ERC721Enumerable, Ownable {
   Counters.Counter private _tokenIdTracker;
 
   string private _baseTokenURI;
-  uint private _mintStatus = 1;
+  uint256 private _mintStatus = 1;
 
   modifier onlyFactory() {
     require(factory != address(0) && _msgSender() == factory, "forbidden");
@@ -82,12 +82,12 @@ contract SynNFT is ERC721, ERC721Enumerable, Ownable {
   }
 
   /**
-     * @dev Change the status
-     *      from 1   (mintable, default)
-     *      to   0   (not mintable)
-     *      or   2   (mintable forever)
-     */
-  function changeMintStatus(uint newStatus) external onlyOwner {
+   * @dev Change the status
+   *      from 1   (mintable, default)
+   *      to   0   (not mintable)
+   *      or   2   (mintable forever)
+   */
+  function changeMintStatus(uint256 newStatus) external onlyOwner {
     if (newStatus == 2) {
       _mintStatus = 2;
     } else if (newStatus == 0 && _mintStatus != 2) {
@@ -96,5 +96,4 @@ contract SynNFT is ERC721, ERC721Enumerable, Ownable {
       revert("Wrong parameter");
     }
   }
-
 }
