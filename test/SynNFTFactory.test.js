@@ -35,6 +35,11 @@ describe("SynNFTFactory", function () {
     maxAllocation = ethers.BigNumber.from(5)
     remainingFreeTokens = ethers.BigNumber.from(5)
     initEthers(ethers)
+
+    console.log(
+        validator.address,
+        treasury.address
+    )
   })
 
   async function initAndDeploy() {

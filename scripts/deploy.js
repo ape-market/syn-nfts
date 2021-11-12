@@ -35,6 +35,7 @@ async function main() {
   const SynNFTFactory = await ethers.getContractFactory("SynNFTFactory")
   const synNFTFactory = await SynNFTFactory.deploy()
   await synNFTFactory.deployed()
+  await synNFTFactory.setValidatorAndTreasury(process.env.VALIDATOR, process.env.TREASURY)
   synNft.setFactory(synNFTFactory.address)
 
   const addresses = {
@@ -47,9 +48,7 @@ async function main() {
 
   console.log(result)
 
-  if (process.env.SAVE_DEPLOYED_ADDRESSES) {
-    await saveAddresses(result, Object.keys(addresses))
-  }
+  await saveAddresses(result, Object.keys(addresses))
 
 }
 
