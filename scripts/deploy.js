@@ -55,20 +55,32 @@ async function main() {
     SynNFTFactory: synNFTFactory.address,
   }
 
-  const result= {}
+  let result  = {}
+  const deployed = path.resolve(__dirname, '../export/deployed.json')
+  if (fs.existsSync(deployed)) {
+    result = require('../export/deployed.json')
+  }
+
   result[await currentChainId()] = addresses
 
   console.log(result)
 
-  await saveAddresses(result, Object.keys(addresses))
+  await saveAddresses(result, addresses)
 
 }
 
 async function saveAddresses(result, addresses) {
-  const output = path.resolve(__dirname, '../export/deployed.json')
+  let output = path.resolve(__dirname, '../export/deployed.json')
   await fs.ensureDir(path.dirname(output))
   await fs.writeFile(output, JSON.stringify(result, null, 2))
-  await exportABIs(addresses)
+  await fs.ensureDir(path.resolve(__dirname, '../tmp'))
+
+  // for immediate verification
+  console.log(path.resolve(__dirname, '../tmp/SynNFTAddress'), addresses.SynNFT)
+  await fs.writeFile(path.resolve(__dirname, '../tmp/SynNFTAddress'), addresses.SynNFT)
+  await fs.writeFile(path.resolve(__dirname, '../tmp/SynNFTFactoryAddress'), addresses.SynNFTFactory)
+
+  await exportABIs(Object.keys(addresses))
 }
 
 async function exportABIs(contracts) {

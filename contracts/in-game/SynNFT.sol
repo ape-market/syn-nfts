@@ -49,19 +49,18 @@ contract SynNFT is ERC721, ERC721Enumerable, Ownable {
     return super.supportsInterface(interfaceId);
   }
 
-  // Initially the factory is the contract who manages the minting
-  // in the future will be replaced by a manager
+  // Initially, the factory manages the minting
+  // Later, it will be replaced by the game's contract
   function setFactory(address factory_) external onlyOwner {
     require(factory_ != address(0), "factory cannot be 0x0");
     factory = factory_;
   }
 
   function safeMint(address to, uint256 quantity) external onlyFactory {
-    require(_mintStatus != 0, "minting ended");
+    require(to != address(0), "recipient cannot be 0x0");
     for (uint256 i = 0; i < quantity; i++) {
-      uint256 tokenId = _tokenIdTracker.current();
+      _safeMint(to, _tokenIdTracker.current());
       _tokenIdTracker.increment();
-      _safeMint(to, tokenId);
     }
   }
 
@@ -79,21 +78,5 @@ contract SynNFT is ERC721, ERC721Enumerable, Ownable {
 
   function updateBaseURI(string memory baseTokenURI) external onlyOwner {
     _baseTokenURI = baseTokenURI;
-  }
-
-  /**
-   * @dev Change the status
-   *      from 1   (mintable, default)
-   *      to   0   (not mintable)
-   *      or   2   (mintable forever)
-   */
-  function changeMintStatus(uint256 newStatus) external onlyOwner {
-    if (newStatus == 2) {
-      _mintStatus = 2;
-    } else if (newStatus == 0 && _mintStatus != 2) {
-      _mintStatus = 0;
-    } else {
-      revert("Wrong parameter");
-    }
   }
 }

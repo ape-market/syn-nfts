@@ -33,6 +33,7 @@ contract SynNFTFactory is Ownable {
 
   address public validator;
   address public treasury;
+  address public game;
 
   mapping(bytes32 => uint8) public usedCodes;
 
@@ -40,17 +41,13 @@ contract SynNFTFactory is Ownable {
   struct NFTConf {
     ISynNFT nft;
     uint256 price;
-    uint256 maxAllocation;
-    uint256 remainingFreeTokens;
+    uint8 maxAllocationPerWallet;
+    uint16 remainingInitialSaleAllocation; // the initial amount of tokens for sale
+    uint16 remainingReservedAllocation; // the initial amount of tokens reserved to blueprint owners. It can be 0
     bool paused;
   }
 
   mapping(address => NFTConf) public nftConf;
-
-  function setValidatorAndTreasury(address validator_, address treasury_) external onlyOwner {
-    setValidator(validator_);
-    setTreasury(treasury_);
-  }
 
   function setValidator(address validator_) public onlyOwner {
     require(validator_ != address(0), "validator cannot be 0x0");
@@ -62,45 +59,40 @@ contract SynNFTFactory is Ownable {
     treasury = treasury_;
   }
 
+  function setGame(address game_) public onlyOwner {
+    require(game_ != address(0), "game cannot be 0x0");
+    game = game_;
+  }
+
   function getNftConf(address nftAddress) external view returns (NFTConf memory) {
     return nftConf[nftAddress];
   }
 
-  // it implicitly starts the sale at the first call
-  function openPauseSale(address nftAddress, bool paused) external {
-    NFTConf memory conf = nftConf[nftAddress];
-    conf.paused = paused;
-    nftConf[nftAddress] = conf;
-  }
-
-  function init(address nftAddress, uint256 remainingFreeTokens) external onlyOwner {
+  function init(
+    address nftAddress,
+    uint256 price,
+    uint8 maxAllocationPerWallet,
+    uint16 remainingInitialSaleAllocation,
+    uint16 remainingReservedAllocation
+  ) external onlyOwner {
     require(validator != address(0) && treasury != address(0), "validator and/or treasury not set, yet");
     ISynNFT synNFT = ISynNFT(nftAddress);
     nftConf[nftAddress] = NFTConf({
       nft: synNFT,
-      price: 10**18, // < 10 ETH, to be changed
-      maxAllocation: 5,
-      paused: true,
-      remainingFreeTokens: remainingFreeTokens
+      price: price,
+      maxAllocationPerWallet: maxAllocationPerWallet,
+      remainingInitialSaleAllocation: remainingInitialSaleAllocation,
+      remainingReservedAllocation: remainingReservedAllocation,
+      paused: true
     });
     emit NFTSet(nftAddress);
   }
 
-  function updatePriceAndMaxAllocation(
-    address nftAddress,
-    uint256 price,
-    uint256 maxAllocation
-  ) external onlyOwner {
-    require(address(nftConf[nftAddress].nft) != address(0), "trying to modify a not existing conf");
-    if (nftConf[nftAddress].price != price) {
-      nftConf[nftAddress].price = price;
-    }
-    if (nftConf[nftAddress].maxAllocation != maxAllocation) {
-      nftConf[nftAddress].maxAllocation = maxAllocation;
-    }
+  function pause(address nftAddress, bool paused) external onlyOwner {
+    nftConf[nftAddress].paused = paused;
   }
 
-  function claimAFreeToken(
+  function claimFreeToken(
     address nftAddress,
     bytes32 authCode,
     bytes memory signature
@@ -109,11 +101,10 @@ contract SynNFTFactory is Ownable {
     require(usedCodes[authCode] == 0, "authCode already used");
     require(isSignedByValidator(encodeForSignature(_msgSender(), nftAddress, authCode), signature), "invalid signature");
     NFTConf memory conf = nftConf[nftAddress];
-    require(conf.nft.balanceOf(_msgSender()) == 0, "only one token per wallet");
-    require(conf.remainingFreeTokens >= 1, "no more free tokens available");
+    require(conf.remainingReservedAllocation >= 1, "no more free tokens available");
     conf.nft.safeMint(_msgSender(), 1);
     usedCodes[authCode] = 1;
-    nftConf[nftAddress].remainingFreeTokens--;
+    nftConf[nftAddress].remainingReservedAllocation--;
   }
 
   function buyDiscountedTokens(
@@ -125,9 +116,11 @@ contract SynNFTFactory is Ownable {
   ) external payable {
     // parameters are validated during the off-chain validation
     NFTConf memory conf = nftConf[nftAddress];
-    require(!conf.paused, "sale is either not open or has been paused");
     require(usedCodes[authCode] == 0, "authCode already used");
-    require(conf.nft.balanceOf(_msgSender()) + quantity <= conf.maxAllocation, "quantity exceeds max allocation");
+    require(
+      conf.nft.balanceOf(_msgSender()) + quantity <= conf.remainingInitialSaleAllocation,
+      "quantity exceeds max allocation"
+    );
     require(
       isSignedByValidator(encodeForSignature(_msgSender(), nftAddress, quantity, authCode, discountedPrice), signature),
       "invalid signature"
@@ -135,6 +128,7 @@ contract SynNFTFactory is Ownable {
     require(msg.value >= discountedPrice.mul(quantity), "insufficient payment");
     conf.nft.safeMint(_msgSender(), quantity);
     usedCodes[authCode] = 1;
+    nftConf[nftAddress].remainingInitialSaleAllocation -= uint16(quantity);
   }
 
   function giveawayTokens(
@@ -152,9 +146,13 @@ contract SynNFTFactory is Ownable {
   function buyTokens(address nftAddress, uint256 quantity) public payable {
     NFTConf memory conf = nftConf[nftAddress];
     require(!conf.paused, "sale is either not open or has been paused");
-    require(conf.nft.balanceOf(_msgSender()) + quantity <= conf.maxAllocation, "quantity exceeds max allocation");
+    require(
+      conf.nft.balanceOf(_msgSender()) + quantity <= conf.remainingInitialSaleAllocation,
+      "quantity exceeds max allocation"
+    );
     require(msg.value >= conf.price.mul(quantity), "insufficient payment");
     conf.nft.safeMint(_msgSender(), quantity);
+    nftConf[nftAddress].remainingInitialSaleAllocation -= uint16(quantity);
   }
 
   // cryptography
