@@ -127,6 +127,16 @@ describe("SynNFTFactory", function () {
       assert.equal(conf.paused, false)
     })
 
+    it("should buyer1 mint 1 tokens if sale started", async function () {
+
+      await expect(await synFactory.connect(buyer1).buyTokens(nftAddress, 1, {
+        value: price
+      }))
+          .to.emit(synNft, 'Transfer')
+          .withArgs(addr0, buyer1.address, 1)
+
+    })
+
     it("should buyer1 mint 3 tokens if sale started", async function () {
 
       // start the sale:
@@ -259,7 +269,7 @@ describe("SynNFTFactory", function () {
       await synFactory.openPauseSale(nftAddress, false)
     })
 
-    it("should buyer1 mint 1 token", async function () {
+    it("should buyer1 buy one discounted token", async function () {
 
       const quantity = 1
       const authCode = ethers.utils.id('a' + Math.random())
@@ -318,6 +328,19 @@ describe("SynNFTFactory", function () {
           .withArgs(addr0, communityMenber1.address, 2)
           .to.emit(synNft, 'Transfer')
           .withArgs(addr0, communityMenber2.address, 3)
+
+    })
+
+    it("should owner giveaway 100 tokens to a single wallet", async function () {
+
+      const recipients = [communityMenber1.address]
+      const quantities = [20]
+
+      await expect(await synFactory.giveawayTokens(nftAddress, recipients, quantities))
+          .to.emit(synNft, 'Transfer')
+          .withArgs(addr0, communityMenber1.address, 1)
+          .to.emit(synNft, 'Transfer')
+          .withArgs(addr0, communityMenber1.address, 19)
 
     })
 
